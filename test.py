@@ -97,11 +97,12 @@ def main():
     parser.add_argument('--domain', required=True, help='Domain name (e.g. fly)')
     parser.add_argument('--model_path', required=True, help='Path to trained .pth model')
     parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--num_workers', type=int, default=2, help='DataLoader worker processes')
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     args = parser.parse_args()
     domain_path = os.path.join(args.data_root, args.domain)
     test_ds = MembraneSegDataset(domain_path, "test", patch_size=256, stride=128, transform=T.ToTensor())
-    test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
+    test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     model = UNet(in_ch=1, out_ch=1).to(args.device)
     model.load_state_dict(torch.load(args.model_path, map_location=args.device))
     metrics = evaluate(model, test_loader, args.device)
@@ -110,5 +111,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 

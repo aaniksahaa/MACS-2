@@ -379,8 +379,8 @@ def combined_loss(pred, target):
 
 # ---------- AL Train Loop ----------
 
-def train_on_subset(model, subset, val_loader, optimizer, device, epochs, batch_size):
-    loader = DataLoader(subset, batch_size=batch_size, shuffle=True, num_workers=2)
+def train_on_subset(model, subset, val_loader, optimizer, device, epochs, batch_size, num_workers):
+    loader = DataLoader(subset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     criterion = combined_loss
     for epoch in range(epochs):
         model.train()
@@ -450,11 +450,11 @@ def laplace_patch_uncertainty_scores(student_model, loader, device, global_hess_
 
 
 def active_learning_memory_efficient(student_model, target_train_ds, unlabeled_idxs, 
-                                   global_hess_diag, device, K, batch_size=8):
+                                   global_hess_diag, device, K, batch_size=8, num_workers=2):
 
     # Create subset and loader for unlabeled samples
     unlabeled_subset = Subset(target_train_ds, unlabeled_idxs)
-    unl_loader = DataLoader(unlabeled_subset, batch_size=batch_size, shuffle=False, num_workers=2)
+    unl_loader = DataLoader(unlabeled_subset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     
     # Compute patch-level uncertainty scores 
     patch_scores = laplace_patch_uncertainty_scores(student_model, unl_loader, device, global_hess_diag)
@@ -478,6 +478,7 @@ def main():
     parser.add_argument('--target_domain', required=True, help='Target/folder name')
     parser.add_argument('--out_path', required=True, help='Path to save the final model')
     parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--num_workers', type=int, default=2, help='DataLoader worker processes')
     parser.add_argument('--active_iters', type=int, default=10)
     parser.add_argument('--annot_budget', type=int, default=100)
     parser.add_argument('--train_epochs_per_iter', type=int, default=5)
@@ -497,14 +498,14 @@ def main():
     print("Extracting features for MK-MMD...")
     target_path = os.path.join(args.data_root, args.target_domain)
     target_val_ds = MembraneSegDataset(target_path, "val", patch_size=256, stride=128, transform=None)
-    target_val_loader = DataLoader(target_val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
+    target_val_loader = DataLoader(target_val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     tgt_feats = []
     src_feats = []
     models = []
     for src_domain, ckpt in zip(args.source_domains, args.source_ckpts):
         src_path = os.path.join(args.data_root, src_domain)
         src_val_ds = MembraneSegDataset(src_path, "val", patch_size=256, stride=128, transform=None)
-        src_val_loader = DataLoader(src_val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
+        src_val_loader = DataLoader(src_val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
         model = UNet(in_ch=1, out_ch=1).to(args.device)
         model.load_state_dict(torch.load(ckpt, map_location=args.device))
         models.append(model)
@@ -520,7 +521,7 @@ def main():
     # Equation 5, 6
 
     target_train_ds = MembraneSegDataset(target_path, "train", patch_size=256, stride=128, transform=None)
-    target_train_loader = DataLoader(target_train_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
+    target_train_loader = DataLoader(target_train_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     print("Training student model with memory-efficient KD...")
     student_model = UNet(in_ch=1, out_ch=1).to(args.device)
@@ -545,7 +546,7 @@ def main():
     print("Starting active learning loop...")
     unlabeled_idxs = np.arange(len(target_train_ds)).tolist()
     labeled_idxs = []
-    val_loader = DataLoader(target_val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
+    val_loader = DataLoader(target_val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     patch_counts = {
         'c-elegans-dauer-stage': 5641,
@@ -578,7 +579,8 @@ def main():
             global_hess_diag=global_hess_diag,
             device=args.device,
             K=K,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            num_workers=args.num_workers
         )
 
         print(f"Selected {len(selected)} samples for annotation.")
@@ -587,7 +589,16 @@ def main():
         unlabeled_idxs = [i for i in unlabeled_idxs if i not in selected]
         labeled_subset = Subset(target_train_ds, labeled_idxs)
         # Fine-tune for train_epochs_per_iter epochs on labeled set
-        train_on_subset(student_model, labeled_subset, val_loader, optimizer, args.device, args.train_epochs_per_iter, args.batch_size)
+        train_on_subset(
+            student_model,
+            labeled_subset,
+            val_loader,
+            optimizer,
+            args.device,
+            args.train_epochs_per_iter,
+            args.batch_size,
+            args.num_workers,
+        )
         print(f"Total labeled: {len(labeled_idxs)}; Unlabeled: {len(unlabeled_idxs)}")
 
  
@@ -598,5 +609,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 

@@ -122,6 +122,7 @@ def main():
     parser.add_argument('--domain', required=True, help='Domain/folder name (e.g. c-elegans-dauer-stage)')
     parser.add_argument('--out_path', required=True, help='Path to save the trained model')
     parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--num_workers', type=int, default=2, help='DataLoader worker processes')
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
@@ -136,8 +137,8 @@ def main():
     train_ds = MembraneSegDataset(domain_path, "train", patch_size=256, stride=128, transform=None)
     val_ds = MembraneSegDataset(domain_path, "val", patch_size=256, stride=128, transform=None)
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     dice_loss = DiceLoss()
     focal_loss = FocalLoss(alpha=0.8, gamma=2)
@@ -165,6 +166,5 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 
 

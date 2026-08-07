@@ -16,6 +16,9 @@ GPU_ID="${GPU_ID:-${CUDA_VISIBLE_DEVICES:-0}}"
 SINGLE_BATCH_SIZE="${SINGLE_BATCH_SIZE:-8}"
 MACS_BATCH_SIZE="${MACS_BATCH_SIZE:-4}"
 EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-4}"
+NUM_WORKERS="${NUM_WORKERS:-2}"
+OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
+MKL_NUM_THREADS="${MKL_NUM_THREADS:-2}"
 LEARNING_RATE="${LEARNING_RATE:-1e-4}"
 ACTIVE_ITERS="${ACTIVE_ITERS:-6}"
 TRAIN_EPOCHS_PER_ITER="${TRAIN_EPOCHS_PER_ITER:-5}"
@@ -66,6 +69,10 @@ Options:
   --single-batch-size N       Single-source training batch size (default: 8)
   --macs-batch-size N         MACS training batch size (default: 4)
   --eval-batch-size N         Evaluation batch size (default: 4)
+  --num-workers N             DataLoader worker processes; 0 disables them (default: 2)
+  --cpu-threads N             Set both OMP and MKL thread counts
+  --omp-num-threads N         OpenMP CPU threads (default: 2)
+  --mkl-num-threads N         Intel MKL CPU threads (default: 2)
   --learning-rate RATE        Single-source learning rate (default: 1e-4)
   --active-iters N            Active-learning iterations (default: 6)
   --train-epochs-per-iter N   Fine-tuning epochs per active iteration (default: 5)
@@ -102,6 +109,14 @@ while (( $# > 0 )); do
     --single-batch-size) SINGLE_BATCH_SIZE="${2:?Missing value for --single-batch-size}"; shift 2 ;;
     --macs-batch-size) MACS_BATCH_SIZE="${2:?Missing value for --macs-batch-size}"; shift 2 ;;
     --eval-batch-size) EVAL_BATCH_SIZE="${2:?Missing value for --eval-batch-size}"; shift 2 ;;
+    --num-workers) NUM_WORKERS="${2:?Missing value for --num-workers}"; shift 2 ;;
+    --cpu-threads)
+      OMP_NUM_THREADS="${2:?Missing value for --cpu-threads}"
+      MKL_NUM_THREADS=$OMP_NUM_THREADS
+      shift 2
+      ;;
+    --omp-num-threads) OMP_NUM_THREADS="${2:?Missing value for --omp-num-threads}"; shift 2 ;;
+    --mkl-num-threads) MKL_NUM_THREADS="${2:?Missing value for --mkl-num-threads}"; shift 2 ;;
     --learning-rate) LEARNING_RATE="${2:?Missing value for --learning-rate}"; shift 2 ;;
     --active-iters) ACTIVE_ITERS="${2:?Missing value for --active-iters}"; shift 2 ;;
     --train-epochs-per-iter) TRAIN_EPOCHS_PER_ITER="${2:?Missing value for --train-epochs-per-iter}"; shift 2 ;;
@@ -125,14 +140,20 @@ cd "$REPO_DIR"
 
 export CUDA_VISIBLE_DEVICES="$GPU_ID"
 export PYTHONUNBUFFERED=1
+export OMP_NUM_THREADS
+export MKL_NUM_THREADS
 
-for value_name in SINGLE_BATCH_SIZE MACS_BATCH_SIZE EVAL_BATCH_SIZE ACTIVE_ITERS TRAIN_EPOCHS_PER_ITER MINIMUM_FREE_GIB; do
+for value_name in SINGLE_BATCH_SIZE MACS_BATCH_SIZE EVAL_BATCH_SIZE OMP_NUM_THREADS MKL_NUM_THREADS ACTIVE_ITERS TRAIN_EPOCHS_PER_ITER MINIMUM_FREE_GIB; do
   value=${!value_name}
   [[ "$value" =~ ^[1-9][0-9]*$ ]] || {
     echo "$value_name must be a positive integer; got: $value" >&2
     exit 2
   }
 done
+[[ "$NUM_WORKERS" =~ ^[0-9]+$ ]] || {
+  echo "NUM_WORKERS must be a non-negative integer; got: $NUM_WORKERS" >&2
+  exit 2
+}
 [[ "$KEEP_EPOCH_CHECKPOINTS" == 0 || "$KEEP_EPOCH_CHECKPOINTS" == 1 ]] || {
   echo "KEEP_EPOCH_CHECKPOINTS must be 0 or 1; got: $KEEP_EPOCH_CHECKPOINTS" >&2
   exit 2
@@ -188,6 +209,9 @@ echo "  GPU_ID=$GPU_ID"
 echo "  SINGLE_BATCH_SIZE=$SINGLE_BATCH_SIZE"
 echo "  MACS_BATCH_SIZE=$MACS_BATCH_SIZE"
 echo "  EVAL_BATCH_SIZE=$EVAL_BATCH_SIZE"
+echo "  NUM_WORKERS=$NUM_WORKERS"
+echo "  OMP_NUM_THREADS=$OMP_NUM_THREADS"
+echo "  MKL_NUM_THREADS=$MKL_NUM_THREADS"
 echo "  LEARNING_RATE=$LEARNING_RATE"
 echo "  ACTIVE_ITERS=$ACTIVE_ITERS"
 echo "  TRAIN_EPOCHS_PER_ITER=$TRAIN_EPOCHS_PER_ITER"
@@ -300,6 +324,7 @@ if contains single "${RUN_STAGES[@]}"; then
         --domain "$domain" \
         --out_path "$MODELS_DIR/$domain/model.pth" \
         --batch_size "$SINGLE_BATCH_SIZE" \
+        --num_workers "$NUM_WORKERS" \
         --epochs "${SINGLE_EPOCHS[$domain]}" \
         --lr "$LEARNING_RATE" \
         --device cuda:0
@@ -353,6 +378,7 @@ if contains macs "${RUN_STAGES[@]}"; then
         --annot_budget "$budget" \
         --train_epochs_per_iter "$TRAIN_EPOCHS_PER_ITER" \
         --batch_size "$MACS_BATCH_SIZE" \
+        --num_workers "$NUM_WORKERS" \
         --device cuda:0
       [[ -s "$output" ]] || {
         echo "Missing final MACS checkpoint: $output" >&2
@@ -377,6 +403,7 @@ if contains eval "${RUN_STAGES[@]}"; then
         --domain "$domain" \
         --model_path "$model_path" \
         --batch_size "$EVAL_BATCH_SIZE" \
+        --num_workers "$NUM_WORKERS" \
         --device cuda:0 >> "$RESULTS_FILE"
     done
   done
