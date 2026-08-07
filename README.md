@@ -22,6 +22,30 @@ https://drive.google.com/file/d/1-tuV1zWgcsaz9tEUDRpsrZPoEj9e_glZ/view?usp=shari
 
 `test.py` : This script contains the code for evaluating the trained models.
 
+`run_macs.sh` : This script runs the complete workflow: dataset setup and validation, single-source training, MACS training, and evaluation. It can safely be restarted because completed checkpoints are skipped.
+
+## Complete Workflow
+
+From the repository directory, run:
+
+```bash
+bash run_macs.sh
+```
+
+`cmd.txt` contains a safe copy-and-edit command reference, including a fully expanded command with all defaults and examples for partial runs.
+
+Frequently changed values are grouped in uppercase at the top of `run_macs.sh` and are also available as command-line options:
+
+```bash
+bash run_macs.sh --help
+```
+
+For example, this runs a separate one-epoch smoke training for only the `fly` domain without affecting normal checkpoints:
+
+```bash
+bash run_macs.sh --stages single --domains fly --single-epochs 1 --batch-size 1 --models-dir models_smoke
+```
+
 
 ### Training
 The training process is divided into two main stages: training the individual source models and then training the MACS model.

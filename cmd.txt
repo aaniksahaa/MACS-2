@@ -1,6 +1,103 @@
-## DATA DOWNLOAD 
+#!/usr/bin/env bash
+# MACS command reference
+# Copy and run ONE command from below. Do not run all examples together.
+
+echo "cmd.txt is a command reference. Copy one command from it into your terminal."
+exit 0
 
 
-gdown 1-tuV1zWgcsaz9tEUDRpsrZPoEj9e_glZ
-unzip data.zip
+# -----------------------------------------------------------------------------
+# 1. COMPLETE RUN — uses every built-in default
+# -----------------------------------------------------------------------------
+bash run_macs.sh
 
+
+# -----------------------------------------------------------------------------
+# 2. COMPLETE RUN — every editable default written explicitly
+#
+# This is the best command to copy and edit. The first eight domains use 100
+# single-source epochs; whole-mouse-brain uses 500 epochs.
+# -----------------------------------------------------------------------------
+bash run_macs.sh \
+  --gpu 0 \
+  --single-batch-size 8 \
+  --macs-batch-size 4 \
+  --eval-batch-size 4 \
+  --learning-rate 1e-4 \
+  --active-iters 6 \
+  --train-epochs-per-iter 5 \
+  --single-epochs 100 \
+  --whole-mouse-epochs 500 \
+  --budgets 10,20,40,60,80,100 \
+  --domains c-elegans-dauer-stage,dhanyasi-P14-mouse-cerebellum,fly,katz-lab-berghia-connective,micron,octopus-vulgaris-vertical-lobe-glia-deep-neuropil,octopus-vulgaris-vertical-lobe-sfltract,snemi,whole-mouse-brain \
+  --stages single,macs,eval \
+  --models-dir models \
+  --results-file multidomain_all_results.csv \
+  --minimum-free-gib 9
+
+# Optional switches that are OFF by default:
+#   --keep-epoch-checkpoints  Keep every intermediate epoch checkpoint.
+#   --preflight-only          Check the setup and exit without doing any work.
+
+
+# -----------------------------------------------------------------------------
+# 3. PREFLIGHT ONLY — verifies packages, GPU, datasets, and free disk
+# -----------------------------------------------------------------------------
+bash run_macs.sh --preflight-only
+
+
+# -----------------------------------------------------------------------------
+# 4. RTX 3050 SMOKE RUN — fly only, one epoch, batch size 1
+#
+# A separate checkpoint directory prevents this short model from being treated
+# as a completed model during a later full run.
+# -----------------------------------------------------------------------------
+bash run_macs.sh \
+  --stages single \
+  --domains fly \
+  --single-epochs 1 \
+  --batch-size 1 \
+  --models-dir models_smoke \
+  --minimum-free-gib 1
+
+
+# -----------------------------------------------------------------------------
+# 5. SELECTED SINGLE-SOURCE MODELS — edit domains, epochs, and batch size
+# -----------------------------------------------------------------------------
+bash run_macs.sh \
+  --stages single \
+  --domains fly,snemi,micron \
+  --single-epochs 10 \
+  --single-batch-size 2 \
+  --models-dir models_partial
+
+
+# -----------------------------------------------------------------------------
+# 6. ONE MACS RUN — requires all nine single-source checkpoints in models/
+# -----------------------------------------------------------------------------
+bash run_macs.sh \
+  --stages macs \
+  --domains fly \
+  --budgets 10 \
+  --active-iters 6 \
+  --train-epochs-per-iter 5 \
+  --macs-batch-size 1 \
+  --models-dir models
+
+
+# -----------------------------------------------------------------------------
+# 7. EVALUATE ONE MACS MODEL — requires the matching trained checkpoint
+# -----------------------------------------------------------------------------
+bash run_macs.sh \
+  --stages eval \
+  --domains fly \
+  --budgets 10 \
+  --eval-batch-size 1 \
+  --models-dir models \
+  --results-file fly_budget10_results.csv
+
+
+# -----------------------------------------------------------------------------
+# 8. SHOW ALL AVAILABLE OPTIONS
+# -----------------------------------------------------------------------------
+bash run_macs.sh --help
